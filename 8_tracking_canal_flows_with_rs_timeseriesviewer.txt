@@ -1,0 +1,63 @@
+// Imports
+var s2 = ee.ImageCollection("COPERNICUS/S2_SR");
+var geometry = /* color: #d63000 */ee.Geometry.Point([76.9254439347412, 16.34223391271912]);
+var geometry3 = /* color: #98ff00 */ee.Geometry.Point([76.92829469269546, 16.382611897997954]);
+var geometry2 = /* color: #0b4a8b */ee.Geometry.Point([76.91413829599965, 16.373071682691652]);
+var geometry4 = /* color: #ffc82d */ee.Geometry.Point([76.91469420157038, 16.375028979205624]);
+    
+// Define the date range for the NDVI time series analysis
+var startDate = '2022-10-01';
+var endDate = '2023-05-31';
+
+// Filter the collection for the specified date range
+var s2NDWI  = s2.filterDate(startDate, endDate)
+                       .filterBounds(geometry)
+                       .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) // filter out cloudy images
+                       .map(function(image) {
+                            return image.normalizedDifference(['B3', 'B8']).rename('NDWI').copyProperties(image,['system:time_start']);
+                        });
+
+// Functions
+// Function to retrieve pixel values
+var getPixelValues = function(bands,geom,label) {
+  return function(img){
+    var pixelValues = img.select(bands).reduceRegion({
+      reducer: ee.Reducer.first(),
+      geometry: geom,
+      scale: 10
+      });
+    return ee.Feature(null, pixelValues).set('date', img.get('system:time_start')).set('label', label);
+  };
+};
+
+var pixel1Data = s2NDWI.map(getPixelValues(['NDWI'],geometry,'main canal at distributary 10'));
+var pixel2Data = s2NDWI.map(getPixelValues(['NDWI'],geometry2,'mid point of distributary 10'));
+// var pixel4Data = s2NDWI.map(getPixelValues(['NDWI'],geometry4,'control - tree adjacent to mid point of distributary 10'));
+
+// Merge the feature collections
+var combinedNDWITimeSeries = pixel1Data.merge(pixel2Data) //.merge(pixel4Data);
+// print(combinedNDWITimeSeries);
+
+// Function to create a chart from the combined time series
+function createCombinedTimeSeriesChart(combinedTimeSeries) {
+  return ui.Chart.feature.groups({
+    features: combinedTimeSeries,
+    xProperty: 'date',
+    yProperty: 'NDWI',
+    seriesProperty: 'label'
+  })
+  .setChartType('LineChart')
+  .setOptions({
+    title: 'NDWI Time Series for Main Canal, Distributary 10 ',
+    hAxis: {title: 'Date'},
+    vAxis: {title: 'NDWI'},
+    lineWidth: 1,
+    pointSize: 3
+  });
+}
+
+// Create a combined chart
+var combinedChart = createCombinedTimeSeriesChart(combinedNDWITimeSeries);
+
+// Display the combined chart
+print("Combined NDWI Chart", combinedChart);
